@@ -1,7 +1,8 @@
 '''
 Created on Jun 10, 2021
 
-@author: patelj1
+@author: Juber Patel
+
 '''
 
 
@@ -129,8 +130,7 @@ def main():
     manifest["FirstDate"] = manifest.groupby("Corrected_Investigator_Patient_ID")["Collection_date"].transform("min")
     manifest["Timepoint (Days)"] = (manifest['Collection_date'] - manifest['FirstDate']).dt.days
     #manifest["Timepoint (Weeks)"] = (manifest["Timepoint (Weeks)"]/7).astype(int)
-    manifest = manifest[["Corrected_Investigator_Patient_ID", "MRN", "CMO_Sample_ID", "FirstDate", 
-                         "Collection_date", "Timepoint (Days)"]]
+    manifest = manifest[["Corrected_Investigator_Patient_ID", "MRN", "CMO_Sample_ID", "FirstDate", "Collection_date", "Timepoint (Days)"]]
     manifest = manifest.sort_values(by=["Corrected_Investigator_Patient_ID", "Collection_date"])
     
     manifest.to_csv("manifest.tsv", sep="\t", index=False)
