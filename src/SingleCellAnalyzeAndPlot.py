@@ -680,8 +680,9 @@ def main():
     plt.savefig("covered-clusters.pdf")
     plt.close()
     '''
+    
 
-
+    '''
     # identify and plot clusters present in sc T23-1 and plot them against individual cells
 
     bulkCCFs["Cluster"] = bulkCCFs["Cluster"].astype(int)
@@ -697,8 +698,8 @@ def main():
     df = tumorCells[tumorCells["MYID"].isin(x["MYID"])].copy()
     df = pd.merge(df, x, on="MYID", how="left")
     df["ClusterCount"] = df.groupby("Cluster")["MYID"].transform("nunique")
-    df["ClusterThreshold"] = df["ClusterCount"] / 10.0
-    df.loc[df["ClusterThreshold"]<1.0, "ClusterThreshold"] = 1.0
+    df["ClusterThreshold"] = round(df["ClusterCount"] / 10.0)
+    df.loc[df["ClusterThreshold"]==0, "ClusterThreshold"] = 1
 
     df["ClusterPresentMutations"] = df.groupby(["Tumor_Sample_Barcode", "Cluster"])["Present"].transform("sum")
     df["ClusterPresent"] = (df["ClusterPresentMutations"] >= df["ClusterThreshold"])
@@ -706,7 +707,7 @@ def main():
     df = df[['Tumor_Sample_Barcode', 'Cluster', 'ClusterPresent', 'ClusterPresentMutations', 'ClusterThreshold', 'ClusterCount']]
     df = df.drop_duplicates(subset=["Tumor_Sample_Barcode", "Cluster"])
     
-    # remove cells that do not have 32 clusters
+    # remove cells that do not cover 32 clusters
     df["NumClusters"] = df.groupby("Tumor_Sample_Barcode")["Cluster"].transform("nunique")
     df = df[df["NumClusters"] == 32]
     df = df.drop("NumClusters", axis=1)
@@ -719,9 +720,11 @@ def main():
     df["ClusterPresentIn"] = df.groupby("Cluster")["ClusterPresent"].transform("sum")
     num_cells = df["Tumor_Sample_Barcode"].nunique()
     df["TumorCellFraction"] = df["ClusterPresentIn"] / num_cells
-    df = df[df["TumorCellFraction"] >= 0.02]
+    #df = df[df["TumorCellFraction"] >= 0.04]
     #df = df[df["Cluster"].isin([1, 2, 5, 8, 11, 20, 13, 21, 33, 31, 10, 9])]
     df = df.sort_values(by=["PresentClustersNum", "PresentClusters", "Tumor_Sample_Barcode", "ClusterPresentIn", "Cluster"], ascending=[False, False, True, False, True])
+
+    print(df.drop_duplicates(subset=["Cluster"])[["Cluster", "ClusterCount", "ClusterPresentIn"]])
     df.to_csv("clusters-in-cells.tsv", sep="\t", index=False)
 
 
@@ -746,11 +749,98 @@ def main():
     plt.tight_layout()
     plt.savefig("clusters-in-cells-filtered.pdf")
     plt.close()
+    '''
+
+    
+    
+
+    
+    # plot mutations in each cluster against individual cells
+
+    bulkCCFs["Cluster"] = bulkCCFs["Cluster"].astype(int)
+    x = bulkCCFs.drop_duplicates(subset=["MYID"]).copy()
+    x = x.drop("Tumor_Sample_Barcode", axis=1)
+    x = x[x["Cluster"]!=-1]
+    # remove cluster 7 because it has only 1 mutation which is not covred well
+    x = x[x["Cluster"]!=7]
+    #x = x[x["Cluster"]!=33]
+
+    # get single cell MYID in line with bulk MYID
+    tumorCells["MYID"] = tumorCells["MYID"].str.split(":").str[1:].str.join(":")
+    df = tumorCells[tumorCells["MYID"].isin(x["MYID"])].copy()
+    df = pd.merge(df, x, on="MYID", how="left")
+    
+    # remove mutations with bad coverage
+    df = df[df["avg_depth"] >= 20]
+    #df= df[df["TumorCellFraction"] >= 0.01]
+    
+    # make sure all mutations have sufficient coverage in all cells
+    #numMutations = df["MYID"].nunique()
+    #df["genotyped_muts"] = df.groupby("Tumor_Sample_Barcode")["MYID"].transform("nunique")
+    #df = df[df["genotyped_muts"] == numMutations]
+
+    #print(df["Tumor_Sample_Barcode"].nunique())
+    #print(df["MYID"].nunique())
+    #sys.exit(0)
+    #here lies the problem!!
+
+    clusters = df["Cluster"].unique().tolist()
+    
+    for cluster in clusters:
+        cdf = df[df["Cluster"]==cluster].copy()
+        cdf = cdf[["Tumor_Sample_Barcode", "MYID", "Present", "PresentIn"]]
+        threshold = round(cdf["MYID"].nunique() / 10.0)
+        if threshold == 0:
+            threshold = 1
+
+        cdf["PresentMutsNum"] = cdf.groupby("Tumor_Sample_Barcode")["Present"].transform("sum")
+        cdf["I"] = cdf["Present"].astype(str)
+        cdf["PresentMuts"] = cdf.groupby("Tumor_Sample_Barcode")["I"].transform(lambda x: ','.join(x))
+        cdf = cdf.sort_values(by=["PresentMutsNum", "PresentMuts", "Tumor_Sample_Barcode", "PresentIn", "MYID"], ascending=[False, False, True, False, True])
+
+        cdf["ClusterPresent"] = (cdf["PresentMutsNum"] >= threshold)
+        cluster_present_cells_num = cdf.drop_duplicates(subset=["Tumor_Sample_Barcode"])["ClusterPresent"].sum()
+
+        cols = cdf["Tumor_Sample_Barcode"].unique().tolist()
+        rows = cdf["MYID"].unique().tolist()
+        
+        cdf = cdf.pivot_table(index="MYID", columns="Tumor_Sample_Barcode", values="Present", fill_value=0).reindex(rows)[cols]
+        
+        cdf.to_csv("cluster-mutations-cells/t.tsv", sep="\t", index=True)
+        print(f"{cluster}: {cdf.shape}, {threshold}, {cluster_present_cells_num}")
+
+        sns.set_style("white")
+        fig = plt.figure(dpi=300, figsize=(12,6))
+        plt.tight_layout()
+
+        # RdBu_r, vlag
+        g = sns.heatmap(cdf, cmap="Reds", cbar=False)
+        g.set(xlabel="Cells")
+        g.set(xticklabels=[])
+
+        plt.yticks(rotation=0)
+        plt.title("Cluster " + str(cluster) + " in individual cells")
+        plt.tight_layout()
+        plt.savefig("cluster-mutations-cells/cluster-" + str(cluster) + "-mutations-in-cells.pdf")
+        plt.close()
+        
+    
+
+
 
     
 
+
+
+
+
+
+
+
+
     
-    
+
+
     
 
 
