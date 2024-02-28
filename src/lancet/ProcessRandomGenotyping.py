@@ -1,3 +1,10 @@
+'''
+
+Author: Juber Patel
+
+'''
+
+
 import os
 import pandas as pd
 from scipy import stats

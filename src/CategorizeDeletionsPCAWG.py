@@ -1,7 +1,7 @@
 '''
 Created on Apr 22, 2022
 
-@author: patelj1
+@author: Juber Patel
 '''
 
 #import portion as p

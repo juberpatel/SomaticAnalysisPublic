@@ -1,7 +1,7 @@
 '''
 Created on Jul 15, 2021
 
-@author: patelj1
+@author: Juber Patel
 '''
 
 import os 

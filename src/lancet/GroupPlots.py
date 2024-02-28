@@ -1,7 +1,8 @@
 '''
 Created on Jun 10, 2021
 
-@author: patelj1
+@author: Juber Patel
+
 '''
 
 
